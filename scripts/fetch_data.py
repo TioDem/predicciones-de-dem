@@ -33,18 +33,16 @@ BASKETBALL_BASE = "https://v1.basketball.api-sports.io"
 FOOTBALL_HEADERS = {"x-apisports-key": API_KEY}
 BASKETBALL_HEADERS = {"x-apisports-key": API_KEY}
 
-# Temporada a usar. Ajusta si el proveedor todavía no abrió la temporada 2026
-# para alguna liga (revisa /leagues si algo sale vacío).
-SEASON = 2026
-NBA_SEASON = "2025-2026"
-
-# Nombres a buscar. El script resuelve el league_id automáticamente
-# para no depender de IDs hardcodeados que puedan cambiar.
+# Nombres a buscar. El script resuelve el league_id Y la temporada actual
+# automáticamente, para no depender de números que cambian cada año.
 FOOTBALL_LEAGUES = {
     "mundial_2026": "FIFA World Cup",
     "liga_mx": "Liga MX",
     "champions_league": "UEFA Champions League",
 }
+
+# Sufijos que indican que NO es la liga principal (categorías juveniles/femeniles)
+EXCLUDE_SUFFIXES = ("u17", "u20", "u21", "u23", "women", "femenil", "youth")
 
 REQUEST_DELAY = 1.2  # segundos entre llamadas para no pegarle al rate limit
 
@@ -56,21 +54,50 @@ def _get(base, path, headers, params=None):
     if resp.status_code != 200:
         print(f"WARN: {url} -> HTTP {resp.status_code}: {resp.text[:200]}")
         return {}
-    return resp.json()
+    data = resp.json()
+    if data.get("errors"):
+        print(f"WARN: {url} -> errors de la API: {data['errors']}")
+    return data
 
 
-def find_league_id(name, season):
-    data = _get(FOOTBALL_BASE, "/leagues", FOOTBALL_HEADERS,
-                {"search": name, "season": season})
+def _is_main_league(name):
+    lname = name.lower()
+    return not any(suf in lname for suf in EXCLUDE_SUFFIXES)
+
+
+def find_league_and_season(name):
+    """Busca la liga por nombre y devuelve (league_id, season_year) usando
+    la temporada marcada como 'current' en la respuesta de la API."""
+    data = _get(FOOTBALL_BASE, "/leagues", FOOTBALL_HEADERS, {"search": name})
     resp = data.get("response", [])
     if not resp:
-        print(f"WARN: no se encontró liga '{name}' para temporada {season}")
-        return None
-    # Prioriza coincidencia exacta de nombre
-    for item in resp:
-        if item["league"]["name"].lower() == name.lower():
-            return item["league"]["id"]
-    return resp[0]["league"]["id"]
+        print(f"WARN: no se encontró liga '{name}'")
+        return None, None
+
+    candidates = [r for r in resp if _is_main_league(r["league"]["name"])]
+    if not candidates:
+        candidates = resp
+
+    exact = [r for r in candidates if r["league"]["name"].lower() == name.lower()]
+    chosen = exact[0] if exact else candidates[0]
+
+    league_id = chosen["league"]["id"]
+    league_name_found = chosen["league"]["name"]
+
+    current_season = None
+    for s in chosen.get("seasons", []):
+        if s.get("current"):
+            current_season = s["year"]
+            break
+    if current_season is None and chosen.get("seasons"):
+        current_season = max(s["year"] for s in chosen["seasons"])
+
+    if current_season is None:
+        print(f"WARN: '{league_name_found}' (id {league_id}) no tiene temporadas listadas")
+        return league_id, None
+
+    print(f"Liga encontrada: {league_name_found} (id {league_id}), temporada actual: {current_season}")
+    return league_id, current_season
 
 
 def get_upcoming_fixtures(league_id, season, next_n=6):
@@ -150,12 +177,14 @@ def fetch_football_snapshot():
     snapshot = {}
     for key, name in FOOTBALL_LEAGUES.items():
         print(f"Buscando liga: {name}")
-        league_id = find_league_id(name, SEASON)
-        if not league_id:
+        league_id, season = find_league_and_season(name)
+        if not league_id or not season:
             snapshot[key] = {"league_name": name, "matches": []}
             continue
 
-        fixtures = get_upcoming_fixtures(league_id, SEASON)
+        fixtures = get_upcoming_fixtures(league_id, season)
+        if not fixtures:
+            print(f"  sin fixtures 'next' para {name} temporada {season} (puede que el plan free no cubra fixtures futuros de esta liga)")
         matches = []
         for fx in fixtures:
             fixture_id = fx["fixture"]["id"]
@@ -163,8 +192,8 @@ def fetch_football_snapshot():
             away = fx["teams"]["away"]
 
             odds = get_average_odds(fixture_id)
-            home_form = get_team_form(home["id"], SEASON)
-            away_form = get_team_form(away["id"], SEASON)
+            home_form = get_team_form(home["id"], season)
+            away_form = get_team_form(away["id"], season)
 
             matches.append({
                 "fixture_id": fixture_id,
@@ -189,8 +218,17 @@ def fetch_nba_snapshot():
         return {"league_name": "NBA", "matches": []}
     league_id = resp[0]["id"]
 
+    # API-Basketball devuelve la lista de temporadas como strings (ej "2024-2025").
+    # Tomamos la última (más reciente) en vez de un valor fijo.
+    seasons = resp[0].get("seasons", [])
+    nba_season = seasons[-1] if seasons else None
+    if not nba_season:
+        print("WARN: la liga NBA no trae temporadas listadas")
+        return {"league_name": "NBA", "matches": []}
+    print(f"NBA encontrada (id {league_id}), temporada usada: {nba_season}")
+
     games_data = _get(BASKETBALL_BASE, "/games", BASKETBALL_HEADERS,
-                       {"league": league_id, "season": NBA_SEASON, "next": 6})
+                       {"league": league_id, "season": nba_season, "next": 6})
     games = games_data.get("response", [])
 
     matches = []
