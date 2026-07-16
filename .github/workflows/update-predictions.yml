@@ -1,0 +1,85 @@
+name: Actualizar predicciones
+
+on:
+  schedule:
+    # 09:00 hora Ciudad de México (UTC-6) = 15:00 UTC. Ajusta si cambia el horario de verano.
+    - cron: "0 15 * * *"
+  workflow_dispatch: {}   # botón "Run workflow" manual en la pestaña Actions
+  push:
+    branches: [main]      # útil mientras pruebas que todo corre bien
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Descargar partidos y cuotas
+        env:
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+        run: python scripts/fetch_data.py
+
+      - name: Generar predicciones y parlays
+        run: python scripts/generate_predictions.py
+
+      - name: Verificar cambios
+        id: diff
+        run: |
+          if git diff --quiet -- data/snapshot.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit y push del snapshot
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          git config user.name "mtzbets-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/snapshot.json data/raw_snapshot.json
+          git commit -m "chore: actualizar snapshot $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push
+
+  deploy-pages:
+    needs: update-data
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout (main actualizado)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Configurar Pages
+        uses: actions/configure-pages@v5
+
+      - name: Subir artefacto del sitio
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - name: Desplegar en GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

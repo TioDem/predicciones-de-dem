@@ -1,0 +1,10 @@
+{
+  "generated_at_utc": null,
+  "engine_version": "stats-v1",
+  "leagues": { "football": {}, "nba": {} },
+  "all_legs": [],
+  "parlay_seguro": { "status": "no_bet", "legs": [], "combined_odds": null, "combined_prob": null },
+  "parlay_arriesgado": { "status": "no_bet", "legs": [], "combined_odds": null, "combined_prob": null },
+  "disclaimer": "Contenido informativo de research deportivo. No es asesoria financiera ni garantiza resultados. Solo para mayores de 18 anos.",
+  "snapshot_hash": "pendiente"
+}
