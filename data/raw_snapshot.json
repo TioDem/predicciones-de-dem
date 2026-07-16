@@ -1,0 +1,21 @@
+{
+  "generated_at_utc": "2026-07-16T06:23:37.190369+00:00",
+  "football": {
+    "mundial_2026": {
+      "league_name": "FIFA World Cup",
+      "matches": []
+    },
+    "liga_mx": {
+      "league_name": "Liga MX",
+      "matches": []
+    },
+    "champions_league": {
+      "league_name": "UEFA Champions League",
+      "matches": []
+    }
+  },
+  "nba": {
+    "league_name": "NBA",
+    "matches": []
+  }
+}
