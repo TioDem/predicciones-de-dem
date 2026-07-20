@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-07-19T15:59:17.741703+00:00",
+  "generated_at_utc": "2026-07-20T16:25:21.528335+00:00",
   "engine_version": "stats-v1",
   "leagues": {
     "football": {
@@ -35,5 +35,5 @@
     "combined_prob": null
   },
   "disclaimer": "Contenido informativo de research deportivo. No es asesoria financiera ni garantiza resultados. Solo para mayores de 18 anos. Juega con responsabilidad. La ultima decision es tuya.",
-  "snapshot_hash": "6cb0439ea98c"
+  "snapshot_hash": "49700d2c30ce"
 }
